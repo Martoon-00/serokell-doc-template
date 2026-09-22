@@ -67,7 +67,16 @@
 // Where the white veil stops being fully opaque. Below this fraction of the
 // artwork the mountain starts becoming visible; above it the artwork is gone.
 // Raise it to push the mountain further down the page.
-#let art-fade-start = 38%
+//
+// Kept clear of body text on purpose: content's own bottom margin sits at
+// depth (1 - page-margin.bottom / art-peak-height) = 56.5% into this box, so
+// anything at or above that line is still content, not footer. Below 38% the
+// veil was already fading by the time text reached its own margin, so a full
+// line sitting on the last row before the footer had visible rock behind it.
+// 60% keeps a few points of margin past 56.5% so a descender or a table row's
+// bottom inset doesn't tip over the line. Re-derive both numbers together if
+// page-margin.bottom or art-peak-height changes.
+#let art-fade-start = 60%
 
 // Vertical centre of the Serokell mark baked into the peak image, as a fraction
 // of that image's height measured from its top. Taken from the source PNG: the
