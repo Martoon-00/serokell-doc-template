@@ -347,14 +347,27 @@
   // larger than H2's. Adjacent weak spacing collapses to the larger of the two,
   // so an H1 directly followed by an H2 stays at the H2's gap-above rather than
   // summing.
+  //
+  // The gap above carries the whole weight of separating one section from the
+  // last, now that authors are not expected to hand-draw a `---` rule between
+  // them - see `weak` below for why that is safe to lean on. 11mm/7mm read as
+  // too subtle to stand in for a rule on their own; 16mm/12mm read as a real
+  // break without the below-gap needing to grow to match.
+  //
+  // `weak: true` is what makes this collapse instead of stacking whenever a
+  // heading already opens a fresh page: weak spacing is dropped when it would
+  // be the first thing in a page's flow, verified by rendering a heading
+  // straight after a forced page break and confirming no gap appears above it.
+  // A heading that lands mid-page keeps the gap; one that opens a page does
+  // not carry a redundant one down from the page above.
   show heading.where(level: 1): it => {
-    v(11mm, weak: true)
+    v(16mm, weak: true)
     block(text(size: 20pt, weight: "bold", it.body))
     v(7mm, weak: true)
   }
 
   show heading.where(level: 2): it => {
-    v(7mm, weak: true)
+    v(12mm, weak: true)
     block(text(size: 14pt, weight: "semibold", it.body))
     v(5mm, weak: true)
   }
