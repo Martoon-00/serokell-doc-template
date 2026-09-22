@@ -213,9 +213,9 @@
 
 // ---------------------------------------------------------------- md tables
 
-// Shared so the two width modes are styled identically.
+// Shared so both width modes are styled identically.
 #let table-stroke = (x, y) => (
-  top: if y == 0 { 0pt } else if y == 1 { 1pt + ink } else { 0.5pt + hairline },
+  top: if y == 0 { 0pt } else { 0.5pt + hairline },
   bottom: 0pt,
   left: 0pt,
   right: 0pt,
@@ -229,40 +229,51 @@
   bottom: 7pt,
 )
 
-// Redraw a Markdown table with fractional columns so it fills the text width.
+// Rebuild a Markdown table as a grid, in both width modes.
 //
-// This has to produce a `grid`, not a `table`, for two reasons:
-//   * a `set table(columns: ..)` rule cannot win, because cmarker passes
-//     `columns` explicitly when it builds the element;
-//   * a `show table` rule that returns a new `table` matches its own output and
-//     recurses until Typst gives up.
-// A grid takes the same stroke and inset API, so the result is identical apart
-// from the column widths.
+// A grid is required, not a table, because:
+//   * `set table(columns: ..)` cannot win: cmarker passes `columns`
+//     explicitly when it builds the element;
+//   * a `show table` rule returning a new `table` matches its own output and
+//     recurses until Typst gives up;
+//   * the heavy rule under the header is an explicit line carried inside
+//     `table.header`'s own children (below), and only a `show` rule that
+//     rebuilds children this way can produce it without recursing.
+// A grid takes the same stroke and inset API, so the result differs from a
+// table only in column widths.
 //
-// Overriding cmarker's `table` through its `scope` looks tempting and does not
-// work: cmarker also resolves `table.cell` and `table.header` against that same
-// name, and a user-defined function has no fields.
-#let stretch-table(it) = {
+// The heavy rule under the header is an explicit `grid.hline` carried inside
+// the header's own children, so it travels with the header wherever it
+// repeats and competes with no cell's stroke.
+//
+// Cell content is styled explicitly here rather than through `show table:
+// set text(..)` / `set par(..)` in the caller: those rules apply only while
+// the element stays a `table`, and this function hands back a `grid`.
+#let rebuild-table(it, tables) = {
   let n = if type(it.columns) == int { it.columns } else { it.columns.len() }
 
   let convert(c, header: false) = {
-    let body = if header {
-      text(font: font-heading, weight: "semibold", size: 9.5pt, c.body)
-    } else {
-      c.body
-    }
+    let styled = text(
+      font: if header { font-heading } else { font-body },
+      weight: if header { "semibold" } else { "regular" },
+      size: 9.5pt,
+      c.body,
+    )
     let extra = (:)
     let cs = c.at("colspan", default: 1)
     if cs != 1 { extra.insert("colspan", cs) }
     let rs = c.at("rowspan", default: 1)
     if rs != 1 { extra.insert("rowspan", rs) }
-    grid.cell(..extra, body)
+    grid.cell(..extra, styled)
   }
 
   let kids = ()
   for c in it.children {
     if c.func() == table.header {
-      kids.push(grid.header(..c.children.map(x => convert(x, header: true))))
+      kids.push(grid.header(
+        ..c.children.map(x => convert(x, header: true)),
+        grid.hline(stroke: 1pt + ink),
+      ))
     } else if c.func() == table.footer {
       kids.push(grid.footer(..c.children.map(convert)))
     } else {
@@ -274,8 +285,9 @@
   // `align` field as an array like (left, center, right), NOT on the cells -
   // the cells carry nothing but their body. Forgetting to carry this over
   // silently left-aligns every column.
+  set par(justify: false)
   grid(
-    columns: (1fr,) * n,
+    columns: if tables == "full" { (1fr,) * n } else { it.columns },
     align: it.at("align", default: auto),
     stroke: table-stroke,
     inset: table-inset,
@@ -384,18 +396,10 @@
 
   // --- tables ---------------------------------------------------------------
   // Clean and rule-light: a heavy line under the header, hairlines between rows.
-  set table(stroke: table-stroke, inset: table-inset, fill: none)
-  show table.cell.where(y: 0): set text(
-    font: font-heading,
-    weight: "semibold",
-    size: 9.5pt,
-  )
-  show table: set par(justify: false)
-  show table: set text(size: 9.5pt)
-
-  // In "full" mode the table is rebuilt as a grid with fractional columns.
-  // See `stretch-table` for why it has to be a grid and not a table.
-  show table: it => if tables == "full" { stretch-table(it) } else { it }
+  // Every table is rebuilt as a grid, in both width modes - see `rebuild-table`
+  // for why, and for why cell styling lives there rather than in a `show
+  // table: set ..` rule here.
+  show table: it => rebuild-table(it, tables)
 
   // --- quotes ---------------------------------------------------------------
   set quote(block: true)
