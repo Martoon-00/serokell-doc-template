@@ -45,6 +45,7 @@
 
 #let page-margin = (top: 24mm, bottom: 40mm, x: 20mm)
 #let page-width = 210mm // A4
+#let page-height = 297mm // A4
 
 // ---------------------------------------------------------------- artwork
 //
@@ -249,37 +250,65 @@
 // Cell content is styled explicitly here rather than through `show table:
 // set text(..)` / `set par(..)` in the caller: those rules apply only while
 // the element stays a `table`, and this function hands back a `grid`.
-#let rebuild-table(it, tables) = {
+//
+// Cells are marked `breakable: false` so a row that does not fit in the
+// remaining space on a page moves whole to the next page instead of
+// splitting its content mid-sentence. Only rows whose cells are all under
+// 20% of the page's usable height: a taller row stays breakable, so it
+// cannot overflow a page outright. The decision is per row, not per cell,
+// so a single tall cell pins its whole row. Rows are taken as runs of `n`
+// cells, which holds because Markdown tables have no spans.
+//
+// The `context` measurement needs wraps the whole grid, not each cell: a
+// `grid.cell` returned from its own `context` block reaches the grid as an
+// opaque element, so `breakable`, `colspan`, and `rowspan` on it would be
+// silently lost.
+#let rebuild-table(it, tables) = context {
   let n = if type(it.columns) == int { it.columns } else { it.columns.len() }
+  let col-width = (page-width - 2 * page-margin.x) / n
+  let page-content-height = page-height - page-margin.top - page-margin.bottom
 
-  let convert(c, header: false) = {
-    let styled = text(
-      font: if header { font-heading } else { font-body },
-      weight: if header { "semibold" } else { "regular" },
-      size: 9.5pt,
-      c.body,
-    )
-    let extra = (:)
-    let cs = c.at("colspan", default: 1)
-    if cs != 1 { extra.insert("colspan", cs) }
-    let rs = c.at("rowspan", default: 1)
-    if rs != 1 { extra.insert("rowspan", rs) }
-    grid.cell(..extra, styled)
+  let convert(cells, header: false) = {
+    let out = ()
+    for row in cells.chunks(n) {
+      let styled = row.map(c => text(
+        font: if header { font-heading } else { font-body },
+        weight: if header { "semibold" } else { "regular" },
+        size: 9.5pt,
+        c.body,
+      ))
+      let breakable = styled.any(s => {
+        measure(s, width: col-width).height > page-content-height * 20%
+      })
+      for (c, s) in row.zip(styled) {
+        let extra = (breakable: breakable)
+        let cs = c.at("colspan", default: 1)
+        if cs != 1 { extra.insert("colspan", cs) }
+        let rs = c.at("rowspan", default: 1)
+        if rs != 1 { extra.insert("rowspan", rs) }
+        out.push(grid.cell(..extra, s))
+      }
+    }
+    out
   }
 
   let kids = ()
+  let body = ()
   for c in it.children {
     if c.func() == table.header {
       kids.push(grid.header(
-        ..c.children.map(x => convert(x, header: true)),
+        ..convert(c.children, header: true),
         grid.hline(stroke: 1pt + ink),
       ))
     } else if c.func() == table.footer {
-      kids.push(grid.footer(..c.children.map(convert)))
+      kids += convert(body)
+      body = ()
+      kids.push(grid.footer(..convert(c.children)))
     } else {
-      kids.push(convert(c))
+      body.push(c)
     }
   }
+  kids += convert(body)
 
   // Column alignment from the Markdown colons lives on the table element's
   // `align` field as an array like (left, center, right), NOT on the cells -
