@@ -44,7 +44,7 @@
 // A document can override this from its frontmatter with `tables: full`.
 #let table-width = "auto"
 
-#let page-margin = (top: 24mm, bottom: 40mm, x: 20mm)
+#let page-margin = (top: 24mm, bottom: 55mm, x: 20mm)
 #let page-width = 210mm // A4
 #let page-height = 297mm // A4
 
@@ -71,14 +71,14 @@
 // Raise it to push the mountain further down the page.
 //
 // Kept clear of body text on purpose: content's own bottom margin sits at
-// depth (1 - page-margin.bottom / art-peak-height) = 56.5% into this box, so
-// anything at or above that line is still content, not footer. Below 38% the
-// veil was already fading by the time text reached its own margin, so a full
-// line sitting on the last row before the footer had visible rock behind it.
-// 60% keeps a few points of margin past 56.5% so a descender or a table row's
+// depth (1 - page-margin.bottom / art-peak-height) = 40.2% into this box, so
+// anything at or above that line is still content, not footer. A value at or
+// below that depth would let the mountain show through before text reaches
+// its own margin, putting visible rock behind the last line on a page. 45%
+// keeps a few points of margin past 40.2% so a descender or a table row's
 // bottom inset doesn't tip over the line. Re-derive both numbers together if
 // page-margin.bottom or art-peak-height changes.
-#let art-fade-start = 60%
+#let art-fade-start = 45%
 
 // Vertical centre of the Serokell mark baked into the peak image, as a fraction
 // of that image's height measured from its top. Taken from the source PNG: the
