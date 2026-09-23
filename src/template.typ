@@ -365,47 +365,40 @@
   // --- headings -------------------------------------------------------------
   show heading: set text(font: font-heading, fill: ink, hyphenate: false)
 
-  // Space-below is deliberately larger than it looks it needs to be. Heading
-  // descenders (the tails on g/y/p) eat into it, and the nominal value has to
-  // clear the body's own paragraph spacing (~3.4mm) or a heading ends up closer
-  // to its text than two paragraphs are to each other. The gap below is kept
-  // generous so a heading reads as attached to the section it opens, not
-  // floating midway between two. The gap above still has to stay clearly larger
-  // than the gap below, or the heading drifts to the midpoint and stops
-  // grouping with its own section; H1 opens a major break, so its gap above is
-  // larger than H2's. Adjacent weak spacing collapses to the larger of the two,
-  // so an H1 directly followed by an H2 stays at the H2's gap-above rather than
-  // summing.
-  //
-  // The gap above carries the whole weight of separating one section from the
-  // last, now that authors are not expected to hand-draw a `---` rule between
-  // them - see `weak` below for why that is safe to lean on. 11mm/7mm read as
-  // too subtle to stand in for a rule on their own; 16mm/12mm read as a real
-  // break without the below-gap needing to grow to match.
-  //
-  // `weak: true` is what makes this collapse instead of stacking whenever a
-  // heading already opens a fresh page: weak spacing is dropped when it would
-  // be the first thing in a page's flow, verified by rendering a heading
-  // straight after a forced page break and confirming no gap appears above it.
-  // A heading that lands mid-page keeps the gap; one that opens a page does
-  // not carry a redundant one down from the page above.
+  // Each heading opens with a weak break above it - 20mm/15mm/9mm for
+  // H1/H2/H3 - and closes with a smaller fixed gap below it - 7mm/5mm/3.5mm -
+  // weak so it collapses at the top of a page instead of stacking with the
+  // page margin. The above-gap is skipped when this heading directly follows
+  // another heading, so two headings in a row don't get a doubled gap.
+  let after-heading = state("after-heading", false)
+  let reset-after-heading = it => {
+    after-heading.update(false)
+    it
+  }
+
   show heading.where(level: 1): it => {
-    v(16mm, weak: true)
+    context if not after-heading.get() { v(20mm, weak: true) }
+    after-heading.update(true)
     block(text(size: 20pt, weight: "bold", it.body))
     v(7mm, weak: true)
   }
 
   show heading.where(level: 2): it => {
-    v(12mm, weak: true)
+    context if not after-heading.get() { v(15mm, weak: true) }
+    after-heading.update(true)
     block(text(size: 14pt, weight: "semibold", it.body))
     v(5mm, weak: true)
   }
 
   show heading.where(level: 3): it => {
-    v(5mm, weak: true)
+    context if not after-heading.get() { v(9mm, weak: true) }
+    after-heading.update(true)
     block(text(size: 11.5pt, weight: "semibold", fill: ink-soft, it.body))
     v(3.5mm, weak: true)
   }
+
+  // --- paragraphs ------------------------------------------------------------
+  show par: reset-after-heading
 
   // --- links ----------------------------------------------------------------
   show link: it => text(fill: accent, it)
@@ -424,33 +417,42 @@
   // NOTE: the body must be a content block with a `set par`, not a `par(..)`
   // call. Wrapping raw in an explicit `par` makes Typst treat the code as
   // block-level content inside a paragraph and silently drop it.
-  show raw.where(block: true): it => block(
-    width: 100%,
-    fill: code-bg,
-    stroke: (left: 2pt + accent),
-    radius: (right: 3pt),
-    inset: (x: 10pt, y: 9pt),
-    {
-      set par(justify: false, leading: 0.6em)
-      it
-    },
-  )
+  show raw.where(block: true): it => {
+    after-heading.update(false)
+    block(
+      width: 100%,
+      fill: code-bg,
+      stroke: (left: 2pt + accent),
+      radius: (right: 3pt),
+      inset: (x: 10pt, y: 9pt),
+      {
+        set par(justify: false, leading: 0.6em)
+        it
+      },
+    )
+  }
 
   // --- tables ---------------------------------------------------------------
   // Clean and rule-light: a heavy line under the header, hairlines between rows.
   // Every table is rebuilt as a grid, in both width modes - see `rebuild-table`
   // for why, and for why cell styling lives there rather than in a `show
   // table: set ..` rule here.
-  show table: it => rebuild-table(it, tables)
+  show table: it => {
+    after-heading.update(false)
+    rebuild-table(it, tables)
+  }
 
   // --- quotes ---------------------------------------------------------------
   set quote(block: true)
-  show quote: it => block(
-    width: 100%,
-    inset: (left: 9mm, right: 4mm, y: 1mm),
-    stroke: (left: 2.5pt + accent),
-    text(size: 10.5pt, fill: ink-soft, style: "italic", it.body),
-  )
+  show quote: it => {
+    after-heading.update(false)
+    block(
+      width: 100%,
+      inset: (left: 9mm, right: 4mm, y: 1mm),
+      stroke: (left: 2.5pt + accent),
+      text(size: 10.5pt, fill: ink-soft, style: "italic", it.body),
+    )
+  }
 
   // --- lists ----------------------------------------------------------------
   set list(marker: text(fill: accent, weight: "bold")[•], indent: 3mm, spacing: 0.9em)
@@ -459,15 +461,28 @@
     weight: "semibold",
     [#n.],
   ))
+  show list: reset-after-heading
+  show enum: reset-after-heading
 
   // --- figures --------------------------------------------------------------
   show figure.caption: set text(size: 8.5pt, fill: ink-soft)
+  // A captioned Markdown image comes out as a `figure`; resetting here, not on
+  // `image` directly, is what keeps this from also firing on the cover and
+  // footer artwork, which call `image` directly outside any figure or
+  // paragraph and must stay untouched by anything declared in this function -
+  // see the footer NOTE below.
+  show figure: reset-after-heading
   // NOTE: deliberately no `set image(width: 100%)` here. A global image set
   // rule also hits the cover and footer artwork and, combined with their
   // explicit `height`, stretches them out of aspect. Body images are sized in
   // main.typ, scoped to the rendered Markdown only.
 
   // --- rules ----------------------------------------------------------------
+  // Deliberately not wired into `after-heading`, unlike the block types above:
+  // the cover and footer draw their own decorative `line`s through this same
+  // selector, and their position relative to body content in the document's
+  // flow is not something to depend on. A leftover manual `---` still gets a
+  // normal accent-hairline; it just does not double as an after-heading reset.
   show line: set line(stroke: 0.6pt + hairline)
 
   if cover-page {
