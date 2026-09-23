@@ -8,6 +8,7 @@
 #let accent = rgb("#D92B04")
 #let ink = rgb("#1A1A1A") // body text
 #let ink-soft = rgb("#5A5F66") // captions, page numbers, table rules
+#let ink-faint = rgb("#72777E") // table header repeated on a later page
 #let hairline = rgb("#DDE1E5") // table / block borders
 #let code-bg = rgb("#F5F6F7")
 
@@ -247,6 +248,16 @@
 // the header's own children, so it travels with the header wherever it
 // repeats and competes with no cell's stroke.
 //
+// Header labels are greyed where the header repeats on a later page, so the
+// repeat reads as a reminder of the columns rather than another row or a
+// new table. A header cell tells a repeat apart by its own page: Typst lays
+// each repetition out at its own location, so `here().page()` gives the
+// page it is drawn on. That is compared against a marker in the first body
+// row, which always sits on the page of the header's first appearance - a
+// marker placed before the grid would not, since orphan prevention can move
+// the header and first row together to the next page. `table-id` matches
+// each table to its own marker.
+//
 // Cell content is styled explicitly here rather than through `show table:
 // set text(..)` / `set par(..)` in the caller: those rules apply only while
 // the element stays a `table`, and this function hands back a `grid`.
@@ -263,19 +274,31 @@
 // `grid.cell` returned from its own `context` block reaches the grid as an
 // opaque element, so `breakable`, `colspan`, and `rowspan` on it would be
 // silently lost.
+#let table-id = counter("table-id")
+
 #let rebuild-table(it, tables) = context {
   let n = if type(it.columns) == int { it.columns } else { it.columns.len() }
   let col-width = (page-width - 2 * page-margin.x) / n
   let page-content-height = page-height - page-margin.top - page-margin.bottom
 
-  let convert(cells, header: false) = {
+  let id = table-id.get().first()
+  let grey-if-repeated(body) = context {
+    let marker = query(<table-first-row>).filter(m => m.value == id)
+    let repeated = marker.len() > 0 and here().page() > marker.first().location().page()
+    if repeated { text(fill: ink-faint, body) } else { body }
+  }
+
+  // `mark-first: true` tags the first cell for `grey-if-repeated` to find.
+  let convert(cells, header: false, mark-first: false) = {
     let out = ()
-    for row in cells.chunks(n) {
-      let styled = row.map(c => text(
+    for (i, row) in cells.chunks(n).enumerate() {
+      let styled = row.enumerate().map(((j, c)) => text(
         font: if header { font-heading } else { font-body },
         weight: if header { "semibold" } else { "regular" },
         size: 9.5pt,
-        c.body,
+        if header { grey-if-repeated(c.body) }
+        else if mark-first and i == 0 and j == 0 { [#metadata(id)<table-first-row>] + c.body }
+        else { c.body },
       ))
       let breakable = styled.any(s => {
         measure(s, width: col-width).height > page-content-height * 20%
@@ -301,14 +324,14 @@
         grid.hline(stroke: 1pt + ink),
       ))
     } else if c.func() == table.footer {
-      kids += convert(body)
+      kids += convert(body, mark-first: true)
       body = ()
       kids.push(grid.footer(..convert(c.children)))
     } else {
       body.push(c)
     }
   }
-  kids += convert(body)
+  kids += convert(body, mark-first: true)
 
   // Column alignment from the Markdown colons lives on the table element's
   // `align` field as an array like (left, center, right), NOT on the cells -
@@ -433,12 +456,14 @@
   }
 
   // --- tables ---------------------------------------------------------------
-  // Clean and rule-light: a heavy line under the header, hairlines between rows.
+  // Clean and rule-light: a heavy line under the header (its labels greyed where
+  // it repeats on a later page), hairlines between rows.
   // Every table is rebuilt as a grid, in both width modes - see `rebuild-table`
   // for why, and for why cell styling lives there rather than in a `show
   // table: set ..` rule here.
   show table: it => {
     after-heading.update(false)
+    table-id.step()
     rebuild-table(it, tables)
   }
 
