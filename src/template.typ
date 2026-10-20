@@ -348,7 +348,11 @@
   show link: it => text(fill: accent, it)
 
   // --- code -----------------------------------------------------------------
-  show raw: set text(font: font-mono, size: 9pt)
+  // JetBrains Mono ships its code ligatures as contextual alternates (`calt`),
+  // which Typst applies by default; `ligatures: false` does not reach them.
+  // Code has to show the characters the author typed: `<=` drawn as one glyph
+  // reads as `≤`, which a reader may retype into code that does not compile.
+  show raw: set text(font: font-mono, size: 9pt, features: (calt: 0))
   // Inline code: subtle tint, no border.
   show raw.where(block: false): it => box(
     fill: code-bg,
