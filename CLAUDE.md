@@ -148,6 +148,11 @@ Real bugs that were hit and fixed here. Do not re-derive them.
   Inserting zero-width spaces to break it automatically was measured and
   rejected: they land in the PDF text layer, so a copied address silently comes
   out corrupted, which is worse than the layout problem.
+- **Code ligatures are off on purpose** (`features: (calt: 0)` on `show raw`).
+  JetBrains Mono draws `<=`, `!=`, `->` as single glyphs that read as `≤`, `≠`,
+  `→`, and a reader retyping them gets code that does not compile. The
+  ligatures live in `calt`, not `liga`, so `ligatures: false` does not turn
+  them off.
 - **`art-logo-centre` is measured from the source PNG** (the mark occupies rows
   773..835 of 940). The page number is aligned to that line. Replacing
   `footer-mountains-right.png` means re-measuring it.
